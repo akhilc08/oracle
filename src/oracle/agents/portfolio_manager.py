@@ -11,6 +11,7 @@ from oracle.agents.base import BaseAgent
 from oracle.agents.messages import Message, MessageBus, MessageType
 from oracle.agents.paper_trading import PaperTradingEngine
 from oracle.agents.reflection import reflect
+from oracle.evaluation.gates import TradeGate
 
 logger = structlog.get_logger()
 
@@ -55,6 +56,7 @@ class PortfolioManagerAgent(BaseAgent):
     def __init__(self, bus: MessageBus, trading_engine: PaperTradingEngine) -> None:
         super().__init__(agent_id="portfolio_manager", name="Portfolio Manager", bus=bus)
         self.trading_engine = trading_engine
+        self._trade_gate = TradeGate()
         self._pending_research: dict[str, dict[str, Any]] = {}
         self._pending_analysis: dict[str, dict[str, Any]] = {}
         self._pending_risk: dict[str, dict[str, Any]] = {}
@@ -216,6 +218,26 @@ class PortfolioManagerAgent(BaseAgent):
         # Determine direction from research thesis + price
         current_price = analysis.get("current_price", 0.5)
         direction = "yes" if research_confidence > 0.5 else "no"
+
+        # 3b. Quality gate — LLM judge + hallucination check
+        thesis = research.get("thesis", "")
+        sources = research.get("sources", [])
+        gate_result = await self._trade_gate.evaluate_trade_proposal(thesis, sources)
+        logger.info(
+            "pm.gate_result",
+            approved=gate_result.approved,
+            blocking_reasons=gate_result.blocking_reasons,
+            trace_id=trace_id,
+        )
+        if not gate_result.approved:
+            logger.info(
+                "pm.gate_blocked",
+                market_id=market_id,
+                reasons=gate_result.blocking_reasons,
+                trace_id=trace_id,
+            )
+            self._pending_research.pop(trace_id, None)
+            return
 
         # 4. Risk check
         portfolio_state = self.trading_engine.get_portfolio_state()
