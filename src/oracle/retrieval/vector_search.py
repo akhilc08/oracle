@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from qdrant_client.models import (
+    DatetimeRange,
+    FieldCondition,
+    Filter,
+    MatchAny,
+    Range,
+)
+
 from oracle.knowledge.embeddings import EmbeddingService
 from oracle.knowledge.qdrant_client import QdrantManager
 from oracle.models import RetrievalQuery, RetrievalResult
@@ -19,65 +27,66 @@ class VectorSearchStrategy:
     async def search(self, query: RetrievalQuery) -> list[RetrievalResult]:
         """Run vector similarity search with optional payload filters."""
         query_vector = self.embedder.embed_query(query.text)
-        filters = self._build_filters(query)
+        qdrant_filter = self._build_filter(query)
 
-        raw_results = await self.qdrant.search(
-            collection=query.collection,
+        hits = await self.qdrant.client.search(
+            collection_name=query.collection,
             query_vector=query_vector,
+            query_filter=qdrant_filter,
             limit=query.top_k,
-            filters=filters,
         )
 
         return [
             RetrievalResult(
-                chunk_id=str(r["id"]),
-                text=r["payload"].get("text", ""),
-                score=r["score"],
+                chunk_id=str(hit.id),
+                text=hit.payload.get("text", ""),
+                score=hit.score,
                 source="vector",
-                metadata=r["payload"],
+                metadata=hit.payload,
             )
-            for r in raw_results
+            for hit in hits
         ]
 
-    def _build_filters(self, query: RetrievalQuery) -> dict | None:
-        """Build Qdrant payload filter from query parameters."""
-        conditions = []
+    @staticmethod
+    def _build_filter(query: RetrievalQuery) -> Filter | None:
+        """Build Qdrant Filter object from query parameters."""
+        conditions: list[FieldCondition] = []
 
         if query.entity_ids:
             conditions.append(
-                {"key": "entity_ids", "match": {"any": query.entity_ids}}
+                FieldCondition(key="entity_ids", match=MatchAny(any=query.entity_ids))
             )
 
         if query.market_ids:
             conditions.append(
-                {"key": "market_ids", "match": {"any": query.market_ids}}
+                FieldCondition(key="market_ids", match=MatchAny(any=query.market_ids))
             )
 
         if query.date_from:
             conditions.append(
-                {
-                    "key": "publication_date",
-                    "range": {"gte": query.date_from.isoformat()},
-                }
+                FieldCondition(
+                    key="publication_date",
+                    range=DatetimeRange(gte=query.date_from),
+                )
             )
 
         if query.date_to:
             conditions.append(
-                {
-                    "key": "publication_date",
-                    "range": {"lte": query.date_to.isoformat()},
-                }
+                FieldCondition(
+                    key="publication_date",
+                    range=DatetimeRange(lte=query.date_to),
+                )
             )
 
         if query.min_authority_score is not None:
             conditions.append(
-                {
-                    "key": "source_authority_score",
-                    "range": {"gte": query.min_authority_score},
-                }
+                FieldCondition(
+                    key="source_authority_score",
+                    range=Range(gte=query.min_authority_score),
+                )
             )
 
         if not conditions:
             return None
 
-        return {"must": conditions}
+        return Filter(must=conditions)

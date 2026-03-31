@@ -72,6 +72,11 @@ class Neo4jClient:
         self._driver: AsyncDriver = AsyncGraphDatabase.driver(uri, auth=(user, password))
         self._uri = uri
 
+    @property
+    def driver(self) -> AsyncDriver:
+        """Expose underlying async driver for advanced queries."""
+        return self._driver
+
     async def setup_schema(self) -> None:
         """Create constraints, indexes, and verify schema."""
         async with self._driver.session() as session:

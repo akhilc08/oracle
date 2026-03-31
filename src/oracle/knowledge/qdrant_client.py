@@ -57,6 +57,11 @@ class QdrantManager:
         self._host = host
         self._port = port
 
+    @property
+    def client(self) -> AsyncQdrantClient:
+        """Expose underlying async client for advanced queries."""
+        return self._client
+
     async def setup_collections(self) -> None:
         """Create all 4 collections with HNSW config and payload indexes."""
         existing = {c.name for c in (await self._client.get_collections()).collections}
