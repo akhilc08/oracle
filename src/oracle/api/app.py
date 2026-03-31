@@ -7,7 +7,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from oracle.api.routes import health, ingestion, knowledge, markets
+from oracle.api.routes import health, ingestion, knowledge, markets, retrieval
 from oracle.knowledge.neo4j_client import Neo4jClient
 from oracle.knowledge.qdrant_client import QdrantManager
 from oracle.config import settings
@@ -62,3 +62,4 @@ app.include_router(health.router)
 app.include_router(knowledge.router, prefix="/api/v1")
 app.include_router(markets.router, prefix="/api/v1")
 app.include_router(ingestion.router, prefix="/api/v1")
+app.include_router(retrieval.router, prefix="/api/v1")
