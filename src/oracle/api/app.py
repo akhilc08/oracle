@@ -7,7 +7,8 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from oracle.api.routes import health, ingestion, knowledge, markets, retrieval
+from oracle.agents import AgentSystem
+from oracle.api.routes import agents, health, ingestion, knowledge, markets, retrieval
 from oracle.knowledge.neo4j_client import Neo4jClient
 from oracle.knowledge.qdrant_client import QdrantManager
 from oracle.config import settings
@@ -35,10 +36,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     await app.state.qdrant.setup_collections()
 
+    # Initialize Agent System
+    app.state.agent_system = AgentSystem()
+
     logger.info("oracle.ready")
     yield
 
     # Cleanup
+    if app.state.agent_system.is_running:
+        await app.state.agent_system.stop()
     await app.state.neo4j.close()
     logger.info("oracle.shutdown")
 
@@ -63,3 +69,4 @@ app.include_router(knowledge.router, prefix="/api/v1")
 app.include_router(markets.router, prefix="/api/v1")
 app.include_router(ingestion.router, prefix="/api/v1")
 app.include_router(retrieval.router, prefix="/api/v1")
+app.include_router(agents.router, prefix="/api/v1")
