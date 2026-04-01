@@ -1,0 +1,140 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Prediction Accuracy",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "oracle_accuracy_rate", "legendFormat": "Accuracy" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "green", "value": 0.7 }
+            ]
+          },
+          "max": 1, "min": 0, "unit": "percentunit"
+        }
+      }
+    },
+    {
+      "title": "Brier Score",
+      "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "targets": [
+        { "expr": "oracle_brier_score", "legendFormat": "Brier" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.2 },
+              { "color": "red", "value": 0.4 }
+            ]
+          },
+          "max": 1, "min": 0
+        }
+      }
+    },
+    {
+      "title": "Portfolio Value",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "oracle_portfolio_value", "legendFormat": "Value" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "title": "Active Positions",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "expr": "oracle_active_positions", "legendFormat": "Positions" }
+      ]
+    },
+    {
+      "title": "Predictions Total (by category)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "targets": [
+        { "expr": "rate(oracle_predictions_total[5m])", "legendFormat": "{{category}} - {{outcome}}" }
+      ]
+    },
+    {
+      "title": "LLM Latency (by model)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(oracle_llm_latency_seconds_bucket[5m]))", "legendFormat": "p50 {{model}}" },
+        { "expr": "histogram_quantile(0.99, rate(oracle_llm_latency_seconds_bucket[5m]))", "legendFormat": "p99 {{model}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "title": "Cost per Prediction",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, rate(oracle_cost_per_prediction_bucket[5m]))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, rate(oracle_cost_per_prediction_bucket[5m]))", "legendFormat": "p95" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "title": "Cache Hit Rate",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 14 },
+      "targets": [
+        { "expr": "oracle_cache_hit_rate", "legendFormat": "Hit Rate" }
+      ],
+      "fieldConfig": {
+        "defaults": { "max": 1, "min": 0, "unit": "percentunit" }
+      }
+    },
+    {
+      "title": "Trade Conviction Distribution",
+      "type": "histogram",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 14 },
+      "targets": [
+        { "expr": "oracle_trade_conviction_bucket", "legendFormat": "{{le}}" }
+      ]
+    },
+    {
+      "title": "Ingestion Documents (by source)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "targets": [
+        { "expr": "rate(oracle_ingestion_docs_total[5m])", "legendFormat": "{{source}}" }
+      ]
+    },
+    {
+      "title": "Portfolio Value Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "targets": [
+        { "expr": "oracle_portfolio_value", "legendFormat": "Portfolio" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["oracle"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Oracle — Prediction Engine",
+  "uid": "oracle-main",
+  "version": 1
+}
