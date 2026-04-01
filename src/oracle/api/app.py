@@ -8,7 +8,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from oracle.agents import AgentSystem
-from oracle.api.routes import agents, evaluation, health, ingestion, knowledge, markets, retrieval
+from oracle.api.routes import (
+    agents,
+    evaluation,
+    health,
+    ingestion,
+    knowledge,
+    markets,
+    optimization,
+    retrieval,
+)
 from oracle.knowledge.neo4j_client import Neo4jClient
 from oracle.knowledge.qdrant_client import QdrantManager
 from oracle.config import settings
@@ -71,3 +80,4 @@ app.include_router(ingestion.router, prefix="/api/v1")
 app.include_router(retrieval.router, prefix="/api/v1")
 app.include_router(agents.router, prefix="/api/v1")
 app.include_router(evaluation.router, prefix="/api/v1")
+app.include_router(optimization.router, prefix="/api/v1")
