@@ -80,6 +80,70 @@ active_positions = Gauge(
     registry=REGISTRY,
 )
 
+# --- Extended backtest / calibration metrics ---
+
+log_loss = Gauge(
+    "oracle_log_loss",
+    "Current aggregate log loss (lower is better; random≈0.69)",
+    registry=REGISTRY,
+)
+
+ev_per_trade = Gauge(
+    "oracle_ev_per_trade",
+    "Average expected value per trade (predicted_prob - market_prob_at_entry)",
+    registry=REGISTRY,
+)
+
+market_adjusted_return = Gauge(
+    "oracle_market_adjusted_return",
+    "Accuracy rate minus average market-implied probability at entry",
+    registry=REGISTRY,
+)
+
+judge_consistency = Gauge(
+    "oracle_judge_consistency",
+    "LLM judge consistency score across repeated evaluations (0–1)",
+    registry=REGISTRY,
+)
+
+bias_detection_recall = Gauge(
+    "oracle_bias_detection_recall",
+    "Of bias-flagged predictions, fraction that resolved against market consensus",
+    registry=REGISTRY,
+)
+
+hallucination_catch_rate = Gauge(
+    "oracle_hallucination_catch_rate",
+    "Fraction of predictions where hallucination detector flagged ≥1 claim",
+    registry=REGISTRY,
+)
+
+resolution_rate = Gauge(
+    "oracle_resolution_rate",
+    "Fraction of evaluated markets that have resolved",
+    registry=REGISTRY,
+)
+
+pipeline_latency_seconds = Histogram(
+    "oracle_pipeline_latency_seconds",
+    "End-to-end prediction pipeline latency in seconds",
+    buckets=(5, 10, 15, 20, 30, 45, 60, 90, 120),
+    registry=REGISTRY,
+)
+
+hit_rate_by_tier = Gauge(
+    "oracle_hit_rate_by_tier",
+    "Prediction accuracy per confidence bucket",
+    labelnames=["bucket"],
+    registry=REGISTRY,
+)
+
+calibration_error = Gauge(
+    "oracle_calibration_error",
+    "Mean absolute deviation between predicted probability and actual resolution rate",
+    registry=REGISTRY,
+)
+
 # --- Ingestion metrics ---
 
 ingestion_docs_total = Counter(

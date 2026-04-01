@@ -139,6 +139,49 @@ class EvaluationJudge:
             overall_quality=round(overall, 2),
         )
 
+    async def evaluate_consistency(
+        self, thesis: str, sources: list[str], n_runs: int = 2
+    ) -> dict[str, float]:
+        """Run the judge n_runs times and return per-dimension score variance.
+
+        A consistency score near 1.0 means the judge is stable; near 0 means
+        the same thesis gets wildly different scores across runs.
+
+        Args:
+            thesis: The trade thesis to evaluate.
+            sources: Supporting sources.
+            n_runs: Number of independent judge evaluations (default 2).
+
+        Returns:
+            Dict with per-dimension variance and an overall consistency score (0–1).
+        """
+        results = []
+        for _ in range(n_runs):
+            result = await self.evaluate(thesis, sources)
+            if result.scores:
+                results.append(result.scores)
+
+        if len(results) < 2:
+            return {"consistency": 0.0, "note": "insufficient runs"}
+
+        dimensions = list(results[0].keys())
+        variances: dict[str, float] = {}
+        for dim in dimensions:
+            scores = [r.get(dim, 0) for r in results]
+            mean = sum(scores) / len(scores)
+            variance = sum((s - mean) ** 2 for s in scores) / len(scores)
+            variances[dim] = round(variance, 4)
+
+        avg_variance = sum(variances.values()) / len(variances) if variances else 0.0
+        # Normalize: max possible variance on 0–10 scale is 25 (scores at 0 and 10)
+        consistency = max(0.0, 1.0 - avg_variance / 25.0)
+
+        return {
+            "consistency": round(consistency, 4),
+            "per_dimension_variance": variances,
+            "n_runs": n_runs,
+        }
+
     def _evaluate_heuristic(self, thesis: str, sources: list[str]) -> EvaluationResult:
         """Heuristic fallback when Claude API is unavailable."""
         word_count = len(thesis.split())
