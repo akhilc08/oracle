@@ -172,18 +172,20 @@ class PolymarketClient:
         tags = [t.lower() for t in (market.get("tags", []) or [])]
         all_text = question + " " + " ".join(tags)
 
+        import re
+
         categories = {
             "politics": ["election", "president", "congress", "senate", "vote", "poll", "democrat", "republican", "trump", "biden"],
             "economics": ["fed", "interest rate", "inflation", "gdp", "recession", "unemployment", "cpi", "tariff"],
             "crypto": ["bitcoin", "ethereum", "crypto", "btc", "eth", "defi", "nft"],
             "sports": ["nba", "nfl", "mlb", "soccer", "championship", "super bowl", "world cup"],
-            "tech": ["ai", "openai", "google", "apple", "meta", "microsoft", "tesla"],
+            "tech": [r"\bai\b", "openai", "google", "apple", r"\bmeta\b", "microsoft", "tesla"],
             "legal": ["supreme court", "ruling", "lawsuit", "indictment", "trial", "verdict"],
             "geopolitics": ["war", "ukraine", "russia", "china", "taiwan", "nato", "sanctions"],
         }
 
         for category, keywords in categories.items():
-            if any(kw in all_text for kw in keywords):
+            if any(re.search(kw, all_text) for kw in keywords):
                 return category
 
         return "other"
