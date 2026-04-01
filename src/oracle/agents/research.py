@@ -125,20 +125,32 @@ async def fetch_latest_news(query: str, page_size: int = 5) -> list[dict[str, An
 
 
 async def _call_claude(prompt: str) -> str:
-    """Call Claude API for complex synthesis. Falls back to empty string on failure."""
+    """Call Claude via the local Claude Code CLI. Falls back to empty string on failure."""
     try:
-        import anthropic
-
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-        response = await client.messages.create(
-            model="claude-3-5-haiku-20241022",
-            max_tokens=1024,
-            messages=[{"role": "user", "content": prompt}],
+        import asyncio
+        proc = await asyncio.create_subprocess_exec(
+            "claude", "-p", prompt,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        return response.content[0].text
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        if proc.returncode != 0:
+            logger.warning("research.claude_call_failed", error=stderr.decode()[:200])
+            return ""
+        return stdout.decode().strip()
     except Exception as e:
         logger.warning("research.claude_call_failed", error=str(e))
         return ""
+
+
+def _relevance_score(question: str, text: str) -> float:
+    """Score how relevant a piece of evidence text is to the question (0.0-1.0)."""
+    q_words = set(question.lower().split()) - {"a", "an", "the", "is", "will", "does", "to", "of", "in", "on", "at", "?"}
+    t_words = set(text.lower().split())
+    if not q_words:
+        return 0.3
+    overlap = len(q_words & t_words) / len(q_words)
+    return min(1.0, overlap * 2)  # scale: 50% word overlap → score=1.0
 
 
 def _simple_synthesis(question: str, evidence: list[dict[str, Any]]) -> tuple[str, float]:
@@ -146,12 +158,26 @@ def _simple_synthesis(question: str, evidence: list[dict[str, Any]]) -> tuple[st
     if not evidence:
         return "Insufficient evidence to form thesis.", 0.3
 
-    evidence_count = len(evidence)
-    avg_score = sum(e.get("score", 0.5) for e in evidence) / evidence_count if evidence_count else 0
-    confidence = min(0.9, 0.4 + (evidence_count * 0.05) + (avg_score * 0.2))
+    # Re-score news items by relevance to the question
+    scored = []
+    for e in evidence:
+        if e.get("type") == "news":
+            score = _relevance_score(question, e.get("text", ""))
+        else:
+            score = e.get("score", 0.5)
+        scored.append(score)
+
+    avg_score = sum(scored) / len(scored)
+    relevant_count = sum(1 for s in scored if s > 0.1)
+
+    # No relevant evidence → abstain at 0.5 rather than bias toward NO
+    if relevant_count == 0 or avg_score < 0.05:
+        confidence = 0.5
+    else:
+        confidence = min(0.85, 0.45 + (relevant_count * 0.04) + (avg_score * 0.3))
 
     snippets = [e.get("text", "")[:100] for e in evidence[:3]]
-    thesis = f"Based on {evidence_count} evidence items: {'; '.join(snippets)}"
+    thesis = f"Based on {relevant_count} relevant evidence items: {'; '.join(snippets)}"
     return thesis, confidence
 
 
@@ -242,16 +268,19 @@ class ResearchAgent(BaseAgent):
                 report.sources.append(url)
 
         # 4. Synthesize thesis — route based on complexity
-        use_claude = len(report.evidence) > 3 and settings.anthropic_api_key
+        use_claude = len(report.evidence) >= 1
         if use_claude:
             evidence_text = "\n".join(
                 f"- [{e['type']}] {e['text'][:200]}" for e in report.evidence
             )
             prompt = (
-                f"You are a prediction market analyst. Given the following evidence about "
-                f"the question: '{question}'\n\nEvidence:\n{evidence_text}\n\n"
-                f"Provide a concise thesis (2-3 sentences) and a confidence score (0.0-1.0) "
-                f"on what the likely outcome is. Format: THESIS: <thesis>\nCONFIDENCE: <float>"
+                f"You are a calibrated prediction market analyst. Your job is to estimate "
+                f"the probability that the answer to this question is YES.\n\n"
+                f"Question: '{question}'\n\nEvidence:\n{evidence_text}\n\n"
+                f"Output the probability of YES (0.0=certainly NO, 1.0=certainly YES). "
+                f"Be calibrated: 0.8 means you'd be right 80% of the time on questions like this. "
+                f"Do not hedge toward 0.5 unless you genuinely have no information. "
+                f"Format exactly:\nTHESIS: <2-3 sentence reasoning>\nCONFIDENCE: <float>"
             )
             response = await _call_claude(prompt)
             if response:

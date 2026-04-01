@@ -41,11 +41,17 @@ GAMMA_API = "https://gamma-api.polymarket.com"
 
 
 async def fetch_resolved_markets(limit: int = 50, category: str | None = None) -> list[dict]:
-    """Fetch resolved markets from Polymarket Gamma API."""
+    """Fetch closed markets with clear YES/NO outcomes from Polymarket Gamma API.
+
+    The Gamma API uses closed=true (not resolved=true). Outcome is inferred from
+    outcomePrices: ["1","0"] = YES resolved, ["0","1"] = NO resolved.
+    We fetch more than needed to account for ambiguous/cancelled markets.
+    """
     params: dict = {
-        "resolved": "true",
-        "limit": str(limit),
-        "order": "resolutionTime",
+        "active": "false",
+        "closed": "true",
+        "limit": str(min(limit * 10, 500)),  # fetch extra, filter down
+        "order": "endDate",
         "ascending": "false",
     }
     if category:
@@ -55,36 +61,66 @@ async def fetch_resolved_markets(limit: int = 50, category: str | None = None) -
         resp = await client.get(f"{GAMMA_API}/markets", params=params)
         resp.raise_for_status()
         data = resp.json()
-        # Gamma API returns list directly or wrapped
-        if isinstance(data, list):
-            return data
-        return data.get("markets", data.get("data", []))
+        markets = data if isinstance(data, list) else data.get("markets", data.get("data", []))
+
+    # Exclude low-signal crypto launch/airdrop markets
+    EXCLUDE_KEYWORDS = [
+        "fdv above", "fdv below", "after launch", "airdrop", "token by",
+        "launch a token", "one day after", "days after launch",
+    ]
+
+    clear = []
+    for m in markets:
+        if parse_outcome(m) is None:
+            continue
+        question = (m.get("question") or m.get("title") or "").lower()
+        if any(kw in question for kw in EXCLUDE_KEYWORDS):
+            continue
+        clear.append(m)
+        if len(clear) >= limit:
+            break
+
+    return clear
 
 
 def parse_outcome(market: dict) -> tuple[bool, float] | None:
-    """Extract (resolved_yes, final_price) from a resolved market.
+    """Extract (resolved_yes, final_price) from a closed market.
 
-    Returns None if the market outcome can't be determined.
+    Polymarket encodes resolution in outcomePrices:
+      ["1", "0"] → YES resolved  (first outcome "Yes" settled at $1)
+      ["0", "1"] → NO resolved   (first outcome "Yes" settled at $0)
+      ["0", "0"] → ambiguous / cancelled — skip
+
+    Note: outcomePrices is a JSON-encoded string in the Gamma API response.
+    Returns None if the outcome cannot be determined.
     """
-    outcome = market.get("outcome", "").lower()
-    prices = market.get("outcomePrices", [])
-
-    if outcome in ("yes", "1"):
-        final_price = float(prices[0]) if prices else 1.0
-        return True, final_price
-    elif outcome in ("no", "0"):
-        final_price = float(prices[1]) if len(prices) > 1 else 0.0
-        return False, final_price
-
-    # Try resolvedAt + finalPrice fallback
-    if market.get("resolved") and prices:
+    import json as _json
+    raw = market.get("outcomePrices", [])
+    # The Gamma API returns outcomePrices as a JSON-encoded string e.g. '["1","0"]'
+    if isinstance(raw, str):
         try:
-            p = float(prices[0])
-            return p >= 0.5, p
-        except (ValueError, TypeError):
-            pass
+            prices = _json.loads(raw)
+        except _json.JSONDecodeError:
+            return None
+    else:
+        prices = raw
 
-    return None
+    if not prices or len(prices) < 2:
+        return None
+
+    try:
+        p0 = float(prices[0])
+        p1 = float(prices[1])
+    except (ValueError, TypeError):
+        return None
+
+    # Must be settled: one price at 1 and the other at 0
+    if p0 == 1.0 and p1 == 0.0:
+        return True, 1.0   # resolved YES
+    elif p0 == 0.0 and p1 == 1.0:
+        return False, 0.0  # resolved NO
+
+    return None  # cancelled, ambiguous, or still live
 
 
 async def run_prediction_pipeline(
@@ -100,7 +136,10 @@ async def run_prediction_pipeline(
     """
     market_id = market.get("id", str(uuid.uuid4()))
     question = market.get("question", "")
-    market_price = float((market.get("outcomePrices") or [0.5])[0])
+    import json as _json
+    raw_prices = market.get("outcomePrices", "[0.5]")
+    prices_list = _json.loads(raw_prices) if isinstance(raw_prices, str) else raw_prices
+    market_price = float(prices_list[0]) if prices_list else 0.5
 
     t0 = time.perf_counter()
 
@@ -174,7 +213,10 @@ async def run_backtest(
             continue
 
         actual_outcome, final_price = outcome_data
-        market_price_at_entry = float((market.get("outcomePrices") or [0.5])[0])
+        import json as _json2
+        _rp = market.get("outcomePrices", "[0.5]")
+        _pl = _json2.loads(_rp) if isinstance(_rp, str) else _rp
+        market_price_at_entry = float(_pl[0]) if _pl else 0.5
         market_category = market.get("groupItemTagSlug", market.get("category", "other"))
 
         print(f"[{i}/{len(markets)}] {question}...")

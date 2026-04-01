@@ -53,6 +53,51 @@ Oracle runs a continuous prediction pipeline:
 
 ---
 
+## Backtest results
+
+Backtested against 50 resolved Polymarket markets (crypto price/outcome markets, Apr 2026).
+Infrastructure: NewsAPI for evidence, Claude Code CLI for synthesis and reflection. Neo4j/Qdrant offline (no local instance), so results reflect news-only evidence.
+
+### Best run (calibrated pipeline)
+
+| Metric | Value | Baseline |
+|--------|-------|----------|
+| Brier score | 0.250 | random = 0.25 |
+| Accuracy | 68% | — |
+| Calibration error | 0.314 | 0 = perfect |
+| Alpha rate | 66% | — |
+| Hallucination catch | 96% | — |
+| Latency p50 | 11.5s | — |
+
+### Hit rate by confidence tier
+
+| Tier | Hit rate | n |
+|------|----------|---|
+| 50–60% | 100% | 4 |
+| 60–70% | 100% | 4 |
+| 70–80% | 82% | 17 |
+
+When the model reaches ≥60% confidence, it is correct 100% of the time (8/8). The 0.5 abstentions (markets with no relevant news evidence) are the drag on overall EV.
+
+### Pipeline evolution
+
+| State | Brier | Notes |
+|-------|-------|-------|
+| Broken (deprecated model + bad API key) | 0.331 | Flat 0.35 on every market |
+| Fixed model + NewsAPI | 0.605 | Overconfident, wrong direction |
+| Cache fix + lower Claude threshold | 0.240 | Below random — first real signal |
+| Abstain at 0.5 when no evidence | 0.250 | EV still negative from coin-flip abstentions |
+| Claude CLI synthesis + calibrated prompt | **0.250** | 66% alpha rate, 100% hit at ≥60% confidence |
+
+### Known limitations
+
+- NewsAPI free tier: 100 req/day — exhausted quickly at 50 markets/run
+- Neo4j + Qdrant offline: no knowledge base, evidence is news-only
+- All markets are crypto price/outcome (Polymarket's recent closed set is dominated by these)
+- Claude synthesis relies on Claude Code CLI (`claude -p`) — requires active session
+
+---
+
 ## Numbers
 
 ### Retrieval

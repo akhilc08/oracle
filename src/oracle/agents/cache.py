@@ -134,7 +134,8 @@ def cached_tool(ttl: int = 300) -> Callable:
                 return value
 
             result = await func(*args, **kwargs)
-            cache.put(tool_name, cache_kwargs, result, ttl)
+            if result:  # don't cache empty/falsy results (e.g. failed API calls)
+                cache.put(tool_name, cache_kwargs, result, ttl)
             return result
 
         wrapper._cache_ttl = ttl  # type: ignore[attr-defined]

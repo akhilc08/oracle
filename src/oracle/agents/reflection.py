@@ -62,28 +62,27 @@ async def reflect(
     """
     result = ReflectionResult(adjusted_confidence=confidence)
 
-    # Try Claude API first
-    if settings.anthropic_api_key:
-        try:
-            import anthropic
-
-            client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
-            prompt = REFLECTION_PROMPT.format(
-                question=question,
-                thesis=thesis,
-                confidence=confidence,
-                momentum=momentum,
-                evidence_count=evidence_count,
-            )
-            response = await client.messages.create(
-                model="claude-3-5-haiku-20241022",
-                max_tokens=512,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            text = response.content[0].text
-            return _parse_reflection_response(text, confidence)
-        except Exception as e:
-            logger.warning("reflection.claude_failed", error=str(e))
+    # Try Claude CLI
+    try:
+        import asyncio
+        prompt = REFLECTION_PROMPT.format(
+            question=question,
+            thesis=thesis,
+            confidence=confidence,
+            momentum=momentum,
+            evidence_count=evidence_count,
+        )
+        proc = await asyncio.create_subprocess_exec(
+            "claude", "-p", prompt,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+        if proc.returncode == 0:
+            return _parse_reflection_response(stdout.decode().strip(), confidence)
+        logger.warning("reflection.claude_failed", error=stderr.decode()[:200])
+    except Exception as e:
+        logger.warning("reflection.claude_failed", error=str(e))
 
     # Heuristic fallback
     return _heuristic_reflection(confidence, momentum, evidence_count)
@@ -116,30 +115,30 @@ def _heuristic_reflection(
     momentum: float,
     evidence_count: int,
 ) -> ReflectionResult:
-    """Heuristic bias detection when Claude API is unavailable."""
+    """Heuristic bias detection when Claude CLI is unavailable."""
     biases: list[str] = []
     adjusted = confidence
 
-    # Overconfidence check: high confidence with little evidence
-    if confidence > 0.8 and evidence_count < 3:
+    # Overconfidence: high confidence with very little evidence
+    if confidence > 0.85 and evidence_count < 2:
         biases.append("overconfidence")
-        adjusted = min(adjusted, 0.75)
+        adjusted = min(adjusted, 0.80)
 
-    # Anchoring check: confidence very close to market-implied probability
-    market_implied = (momentum + 1) / 2  # Convert [-1,1] momentum to [0,1]
-    if abs(confidence - market_implied) < 0.05:
+    # Momentum alignment: boost confidence when market price confirms thesis direction
+    if momentum > 0.2 and confidence > 0.5:
+        adjusted = min(0.95, adjusted + momentum * 0.05)
+    elif momentum < -0.2 and confidence < 0.5:
+        adjusted = max(0.05, adjusted + momentum * 0.05)
+
+    # Anchoring check: flag if confidence is very close to market-implied probability
+    market_implied = (momentum + 1) / 2
+    if abs(confidence - market_implied) < 0.03:
         biases.append("anchoring bias")
-        # No adjustment — just flag it
-
-    # Recency bias: strong momentum + high confidence suggests chasing
-    if abs(momentum) > 0.6 and confidence > 0.7:
-        biases.append("recency bias")
-        adjusted = min(adjusted, confidence - 0.05)
 
     reasoning = (
         f"Heuristic analysis: {len(biases)} potential biases detected. "
         f"Evidence count: {evidence_count}, momentum: {momentum:.2f}. "
-        f"{'Confidence adjusted downward.' if adjusted < confidence else 'No confidence adjustment needed.'}"
+        f"Confidence {'adjusted to ' + str(round(adjusted, 2)) if adjusted != confidence else 'unchanged'}."
     )
 
     return ReflectionResult(

@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS llm_traces (
 
 # Cost per 1M tokens (USD)
 MODEL_COSTS: dict[str, dict[str, float]] = {
-    "claude-3-5-haiku-20241022": {"input": 0.80, "output": 4.00},
+    "claude-haiku-4-5-20251001": {"input": 0.80, "output": 4.00},
     "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
     "claude-3-haiku-20240307": {"input": 0.25, "output": 1.25},
     "claude-3-sonnet-20240229": {"input": 3.00, "output": 15.00},
@@ -112,7 +112,7 @@ class LLMTracer:
         Usage:
             async with tracer.trace("research", "synthesis", market_id) as t:
                 response = await call_llm(...)
-                t.record(model="claude-3-5-haiku-20241022", prompt_tokens=500, completion_tokens=200)
+                t.record(model="claude-haiku-4-5-20251001", prompt_tokens=500, completion_tokens=200)
         """
         record = TraceRecord(
             trace_id=uuid.uuid4().hex,

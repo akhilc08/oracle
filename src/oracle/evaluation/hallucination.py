@@ -103,7 +103,7 @@ class HallucinationDetector:
         prompt = EXTRACT_CLAIMS_PROMPT.format(text=text)
 
         response = await client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
@@ -167,7 +167,7 @@ class HallucinationDetector:
         prompt = CONTRADICTION_PROMPT.format(claims=claims_text)
 
         response = await client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             messages=[{"role": "user", "content": prompt}],
         )
