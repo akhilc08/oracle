@@ -28,6 +28,21 @@ class Settings(BaseSettings):
     # Claude API
     anthropic_api_key: str = ""
 
+    # Twitter/X
+    twitter_bearer_token: str = ""
+
+    # Reddit
+    reddit_client_id: str = ""
+    reddit_client_secret: str = ""
+
+    # Government APIs
+    congress_api_key: str = ""
+    courtlistener_api_key: str = ""
+
+    # Audio/Whisper
+    whisper_model_size: str = "base"
+    audio_sources_config: str = ""
+
     # Ingestion
     news_poll_interval_seconds: int = 900  # 15 min
     market_poll_interval_seconds: int = 60
